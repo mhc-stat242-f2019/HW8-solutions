@@ -1,0 +1,281 @@
+---
+title: "HW8"
+subtitle: "Sections 9.1, 9.2, 9.3.2, 9.3.3, 9.3.4, 10.1, 10.2.2, 10.2.3, 10.3"
+author: "Your Name Here"
+output: pdf_document
+---
+
+The code below just loads some packages and makes it so that enough digits are printed that you won't get confused by rounding errors.
+
+```{r, message = FALSE}
+library(dplyr) # functions like summarize
+library(ggplot2) # for making plots
+library(readr)
+
+options("pillar.sigfig" = 10) # print 10 significant digits in summarize output
+```
+
+## Problem 1: Crabs (Adapted from Sleuth 3 exercise 9.17)
+
+The description below comes from our book:
+
+As part of a study of the effects of predatory intertidal crab species on snail populations, researchers measured the mean closing forces (in newtons) and the propodus heights (in mm) of the claws on several crabs of hreee species.  (Data from S. B. Yamada and E. G. Boulding, "Claw Morphology, Prey Size Selection and Foraging Efficiency in Generalist and Specialist Shell-Breaking Crabs," *Journal of Experimental Marine Biology and Ecology, 220 (1998): 191-211.)
+
+Here we will examine the relationship between closing force (our response variable) and species and propodus height (explanatory variables).
+
+The following code reads the data in.
+
+```{r}
+crabs <- read_csv("http://www.evanlray.com/data/sleuth3/ex0722_crabs.csv")
+```
+
+### (a) Create an appropriate plot of the data involving all three variables.  Does it appear that an additive model or a model with interactions between species and height would be more appropriate?
+
+```{r}
+ggplot(data = crabs, mapping = aes(x = Height, y = Force, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+### (b) Fit a multiple regression model to the data, allowing for different slopes for the different species.  In this model, use the original Height and Force variables as explanatory variables.  Create residual diagnostic plots of your model fit and calculate the standard deviation of the residuals within each group.  Discuss any conditions for the regression model that are not satisfied.
+
+```{r}
+lm_fit <- lm(Force ~ Height * Species, data = crabs)
+crabs <- crabs %>%
+  mutate(
+    residual = residuals(lm_fit)
+  )
+
+ggplot(data = crabs, mapping = aes(x = Height, y = residual)) +
+  geom_point()
+ggplot(data = crabs, mapping = aes(x = residual, color = Species)) +
+  geom_density()
+
+crabs %>%
+  group_by(Species) %>%
+  summarize(sd(residual))
+```
+
+The main problem I see is that the standard deviation of the residuals is smaller for the Hemigrapsus nudus species than for the other two species.  It does also look like the standard deviation of residuals may be slightly smaller for small values of Height than for large values of Height.  I always have doubts about independence: were they careful in selecting the crabs for the sample "randomly"?
+
+### (c) Find a set of transformations of the data so that the conditions of the multiple regression model are better satisfied (Note: I think you can do well enough with transformations of the response variable only).  Verify that you have succeed by discussing residual diagnostic plots and standard deviations of the residuals across the different species.  Recreate your plot of the data from part (a), but with your transformed variables this time.
+
+```{r}
+crabs <- crabs %>%
+  mutate(
+    sqrt_Force = sqrt(Force)
+  )
+
+lm_fit <- lm(sqrt_Force ~ Height * Species, data = crabs)
+crabs <- crabs %>%
+  mutate(
+    residual = residuals(lm_fit)
+  )
+
+ggplot(data = crabs, mapping = aes(x = Height, y = residual)) +
+  geom_point()
+ggplot(data = crabs, mapping = aes(x = residual, color = Species)) +
+  geom_density()
+
+crabs %>%
+  group_by(Species) %>%
+  summarize(sd(residual))
+
+ggplot(data = crabs, mapping = aes(x = Height, y = sqrt_Force, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+A square root transformation has helped, but the situation is not perfect.  The standard deviation of residuals for the Hemigrapsus nudus group is smaller than for the other two groups, and the ratio of the largest standard deviation to the smallest is about 1.5.  Really this is probably good enough, but you could also keep looking.
+
+```{r}
+crabs <- crabs %>%
+  mutate(
+    log_Force = log(Force)
+  )
+
+lm_fit <- lm(log_Force ~ Height * Species, data = crabs)
+crabs <- crabs %>%
+  mutate(
+    residual = residuals(lm_fit)
+  )
+
+ggplot(data = crabs, mapping = aes(x = Height, y = residual)) +
+  geom_point()
+ggplot(data = crabs, mapping = aes(x = residual, color = Species)) +
+  geom_density()
+
+crabs %>%
+  group_by(Species) %>%
+  summarize(sd(residual))
+
+ggplot(data = crabs, mapping = aes(x = Height, y = log_Force, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+Now the standard deviation of residuals is smaller for the Cancer productus species than for the other two species.  The ratio of the largest and smallest standard deviations is still about 1.5.
+
+What if we try something in between?
+
+```{r}
+crabs <- crabs %>%
+  mutate(
+    Force_0.25 = Force^0.25
+  )
+
+lm_fit <- lm(Force_0.25 ~ Height * Species, data = crabs)
+crabs <- crabs %>%
+  mutate(
+    residual = residuals(lm_fit)
+  )
+
+ggplot(data = crabs, mapping = aes(x = Height, y = residual)) +
+  geom_point()
+ggplot(data = crabs, mapping = aes(x = residual, color = Species)) +
+  geom_density()
+
+crabs %>%
+  group_by(Species) %>%
+  summarize(sd(residual))
+
+ggplot(data = crabs, mapping = aes(x = Height, y = Force_0.25, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+In terms of constant standard deviations across the three species and across values of Height, this transformation is best.  There are some slight indications of non-linearity, but not too serious.  The distributions of residuals are also skewed slightly right, but not too seriously.  This is good enough.
+
+```{r}
+summary(lm_fit)
+```
+
+### (d) Write down the model you fit in part (c).  This should not involve any numbers.
+
+$Y_i = \beta_0 + \beta_1 Height + \beta_2 SpeciesHemigrapsus nudus + \beta_3 SpeciesLophopanopeus bellus + \beta_4 Height * SpeciesHemigrapsus nudus + \beta_5 Height * SpeciesLophopanopeus bellus$
+$\varepsilon_i \sim \text{Normal}(0, \sigma)$
+
+### (e) Write down the equation for the estimated population mean (transformed) force as a function of species indicator variables and propodus height.
+
+$\hat{\mu} = 1.039 + 0.097 Height + 0.249 SpeciesHemigrapsus nudus -0.496 SpeciesLophopanopeus bellus - 0.081 Height * SpeciesHemigrapsus nudus + 0.064 Height * SpeciesLophopanopeus bellus$
+
+### (f) Write down the equation for the estimated mean (transformed) forces as a function of propodus height, in the population of Lophopanopeus bellus crabs.  Group together like terms so you have a single intercept and slope.
+
+$\hat{\mu} = (1.039 - 0.496) + (0.097 + 0.064) Height$
+
+### (g) What is the estimated change in (transformed) claw closing force that is associated with a 1 mm increase in propodus height, in the population of Cancer productus crabs?  Just writing down a number is good enough.
+
+0.097
+
+### (h) What is the estimated change in (transformed) claw closing force that is associated with a 1 mm increase in propodus height, in the population of Hemigrapsus Nudus crabs?  Just writing down a number is good enough.
+
+(0.097 - 0.081)
+
+### (i) Find and interpret a 95% confidence interval for the difference between the change in population mean (transformed) claw closing force that is associated with a 1 mm increase in propodus height in the populations of Hemigrapsus Nudus crabs and Cancer productus crabs.  (That sentence was a lot to take in.  I'm looking for a confidence interval for the difference between the population quantities from parts h and g.)  Your answer should include a couple of sentences describing interpretation in context.
+
+```{r}
+confint(lm_fit)
+```
+
+We are 95% confident that in the population of Hemigrapsus nudus crabs, a 1 mm increase in propodus height is associated with a change in mean claw closing force that is between 0.157 and 0.006 units smaller than the corresponding change in the population of Cancer productus crabs.
+
+### (j) Conduct a test of the claim that the slopes of lines describing the relationship between propodus height and (transformed) closing force is the same in the populations of crabs of all three species.  State your null and alternative hypotheses in terms of model parameters, the p-value for the test, and your conclusion in context.
+
+$H_0: \beta_4 = \beta_5 = 0$
+
+$H_A:$ At least one of $\beta_4$ and $\beta_5$ is not equal to 0.
+
+```{r}
+reduced_lm_fit <- lm(Force_0.25 ~ Height + Species, data = crabs)
+anova(reduced_lm_fit, lm_fit)
+```
+
+The p-value for the test is 0.0024.  The data provide strong evidence against the claim that the slopes of lines describing the relationship between propodus height and (transformed) closing force is the same in the populations of crabs of all three species.
+
+### (k) Although you had R do the calculation of the test statistic and the p-value for the test in part (j), you should know how that statistic was calculated.  Describe how to calculate the test statistic for your test from part (j) in a paragraph or so.  Include a discussion of how the degrees of freedom for the statistic are found.  Does a large value of the statistic offer strong or weak evidence against the null hypothesis?  Why?
+
+The test is an F test, based on the extra sum of squares for a comparison of a full model that allows for different slopes for all three species with a reduced model that has the same slope for all three species.  We calculate the residual sum of squares for both models.  The extra sum of squares is calculated as the difference between the residual sum of squares for the model with the same slope for all species and the residual sum of squares for the model with different slopes.  The larger this extra sum of squares is, the stronger the indication that including different slopes is necessary.
+
+The F statistic is calculated as
+
+$$F = \frac{(\text{Extra Sum of Squares})/(\text{Extra df})}{(\text{Full Model Sum of Squares})/(\text{Full df})}$$
+
+Since the extra sum of squares appears in the numerator of this calculation, a larger extra sum of squares means that the F statistic is larger; so, a large value of the F statistic offers strong evidence against the null hypothesis.
+
+The degrees of freedom for the extra sum of squares is calculated as the difference in degrees of freedom for the reduced model and the degrees of freedom for the full model.  The degrees of freedom for each model is calculated as the sample size minus the number of parameters for the mean.
+
+### (l) How were the $\beta$ coefficients in your models above estimated?  You can answer in just a sentence or two.  I talked about this for about 3 minutes on Wed., Oct 16 and I just want you to remind yourself of this important idea that we have not spent much time on.
+
+The $\beta$ coefficients in a linear regression model are estimated by minimizing the sum of squared residuals.
+
+## Problem 2: Natal Dispersal Distances of Mammals (Sleuth3 problem 11.24)
+
+Quote from the book:
+
+> Natal dispersal distances are the distances that juvenile animals travel from their birthplace to their adult home. An assessment of the factors affecting dispersal distances is importan for understanding population spread, recolonization, and gene flow -- which are central issues for conservation of many vertebrate species. For example, an understanding of dispersal distances will help to identify which species in a community are vulnerable to the loss of connectedness of habitat. To further the understanding of determinants of natal dispersal distances, researchers gathered data on body mass, diet type (herbivore, omnivore, or carnivore), and maximum natal dispersal distance for various mammals. ... Analyze the data to describe the distribution of maximum dispersal distance as a function of body mass and diet type.  Write a summary of statistical findings.
+
+The following R code reads in the data.
+
+```{r}
+dispersion <- read_csv("http://www.evanlray.com/data/sleuth3/ex1124_natal_dispersion.csv")
+head(dispersion)
+```
+
+Here are things I will be looking more in more detail:
+
+1. You will need to find a data transformation.  Please justify your choice of transformation with a brief discussion of plots of the transformed data and residuals.  Remember not to obsess about finding a perfect transformation; a good-enough transformation can be found on the steps of the ladder of powers.
+
+2. The model you use should be justified (i.e., only allow for different slopes for the different diet types if the data indicate different slopes are necessary).
+
+3. Your scientific conclusions should discuss, in context, conclusions that can be drawn about the associations between body mass, diet type, and natal dispersal distance.  It would be good to discuss confidence intervals for these effects.
+
+```{r}
+dispersion <- dispersion %>%
+  mutate(
+    log_dist = log(MaxDist),
+    log_mass = log(BodyMass)
+  )
+ggplot(data = dispersion, mapping = aes(x = log_mass, y = log_dist, color = Type)) +
+  geom_point()
+```
+
+```{r}
+lm_fit_different_slopes <- lm(log_dist ~ log_mass * Type, data = dispersion)
+dispersion <- dispersion %>%
+  mutate(
+    resid = residuals(lm_fit_different_slopes)
+  )
+ggplot(data = dispersion, mapping = aes(x = resid, color = Type)) +
+  geom_density()
+
+ggplot(data = dispersion, mapping = aes(x = log_mass, y = resid, color = Type)) +
+  geom_point()
+
+dispersion %>%
+  group_by(Type) %>%
+  summarize(
+    sd(resid)
+  )
+```
+
+The plots and summaries calculated above show that after applying a log transformation to the distances and the masses, the residuals follow a distribution that is approximately normal across all three groups, and is also fairly consistent in terms of standard deviation across all three groups and the range of values for mass.  Additionally, the scatter plot of the transformed data shows approximately linear relationships between log mass and log distance within each group.  As always, I find it difficult to assess the condition of independence.  I could imagine that some of these species might be closely related, and might therefore have similar residuals around their respective means.
+
+```{r}
+lm_fit_same_slopes <- lm(log_dist ~ log_mass + Type, data = dispersion)
+anova(lm_fit_same_slopes, lm_fit_different_slopes)
+```
+
+The data do not offer evidence that different slopes are required, so we will proceed with the model that uses the same slope for all three diet types.
+
+```{r}
+summary(lm_fit_same_slopes)
+confint(lm_fit_same_slopes)
+lm_fit_mass_only <- lm(log_dist ~ log_mass, data = dispersion)
+anova(lm_fit_mass_only, lm_fit_same_slopes)
+```
+
+The data indicate that an increase in log mass of one unit is associated with an increase in log natal distance of between 0.384 and 0.638 units (with 95% confidence), holding fixed the diet type.
+
+Additionally, there is strong evidence of a difference in log natal distance between mammals with carnivorous diets and herbivorous diets, holding fixed the animal's mass.  We are 95% confident that the mean log distance traveled is between about 3.38 and 1.69 units lower for herbivorous mammals than for carnivorous mammals, at a fixed body size.  This suggests that carnivorous mammals tend to travel larger distances than herbivorous mammals.
+
+There is not strong evidence of a difference in log natal distances between carnivorous and omnivorous animals; our 95% confidence interval for this difference at a fixed mass is [-2.37, 0.06].  However, the estimated difference for carnivorous mammals and omnivorous mammals is -1.16; when compared with the estimated difference of -2.54 for carnivorous mammals and herbivorous mammals, a consistent story emerges that mammals with more carnivorous diets tend to have larger natal distances than mammals with more herbivorous diets, on average.
